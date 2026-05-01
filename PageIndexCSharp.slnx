@@ -1,0 +1,5 @@
+﻿<Solution>
+  <Project Path="PageIndexCSharp.Tests/PageIndexCSharp.Tests.csproj" />
+  <Project Path="PageIndexCSharp/PageIndexCSharp.csproj" />
+  <Project Path="sample/Sample/Sample.csproj" />
+</Solution>
