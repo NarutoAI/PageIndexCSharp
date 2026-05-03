@@ -21,7 +21,10 @@ public sealed class FilePageIndexDocumentStore : IPageIndexDocumentStore
         }
 
         _directoryPath = Path.GetFullPath(directoryPath);
-        Directory.CreateDirectory(_directoryPath);
+        if (!Directory.Exists(_directoryPath))
+        {
+            Directory.CreateDirectory(_directoryPath);
+        }
     }
 
     /// <inheritdoc />
