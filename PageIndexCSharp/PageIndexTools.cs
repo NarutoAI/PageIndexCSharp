@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using PageIndexCSharp.Interfaces;
 using PageIndexCSharp.Model;
 using PageIndexCSharp.Store;
 
@@ -91,7 +92,7 @@ public sealed class PageIndexTools
         try
         {
             HashSet<int> pageNumbers = ParsePages(pages);
-            List<PdfPageContent> selectedPages = document.Pages
+            List<DocumentPageContent> selectedPages = document.Pages
                 .Where(page => pageNumbers.Contains(page.Page))
                 .OrderBy(page => page.Page)
                 .ToList();

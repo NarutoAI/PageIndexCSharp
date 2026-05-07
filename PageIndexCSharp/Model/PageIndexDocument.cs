@@ -14,13 +14,13 @@ public sealed class PageIndexDocument
     public string Id { get; set; } = string.Empty;
 
     /// <summary>
-    /// 文档类型，目前 C# MVP 支持 pdf。
+    /// 文档类型，例如 pdf、md。
     /// </summary>
     [JsonPropertyName("type")]
     public string Type { get; set; } = "pdf";
 
     /// <summary>
-    /// 原始 PDF 文件路径。
+    /// 原始文档文件路径。
     /// </summary>
     [JsonPropertyName("path")]
     public string Path { get; set; } = string.Empty;
@@ -39,7 +39,7 @@ public sealed class PageIndexDocument
     public string? DocDescription { get; set; }
 
     /// <summary>
-    /// PDF 总页数。
+    /// 文档总页数。
     /// </summary>
     [JsonPropertyName("page_count")]
     public int PageCount { get; set; }
@@ -51,8 +51,8 @@ public sealed class PageIndexDocument
     public List<PageIndexNode> Structure { get; set; } = [];
 
     /// <summary>
-    /// PDF 逐页文本，用于 get_page_content 精确取页。
+    /// 文档逐页文本，用于 get_page_content 精确取页。
     /// </summary>
     [JsonPropertyName("pages")]
-    public List<PdfPageContent> Pages { get; set; } = [];
+    public List<DocumentPageContent> Pages { get; set; } = [];
 }

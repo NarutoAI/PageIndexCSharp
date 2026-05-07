@@ -3,8 +3,9 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
+using PageIndexCSharp.Interfaces;
 
-namespace PageIndexCSharp;
+namespace PageIndexCSharp.Llm;
 
 /// <summary>
 /// 基于 Microsoft Agent Framework 的 LLM 适配器。

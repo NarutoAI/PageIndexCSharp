@@ -4,6 +4,9 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <Version>1.0.0</Version>
+        <Authors>Naruto</Authors>
+        <RepositoryUrl>https://github.com/NarutoAI/PageIndexCSharp</RepositoryUrl>
     </PropertyGroup>
 
     <ItemGroup>

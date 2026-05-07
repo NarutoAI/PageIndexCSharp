@@ -1,6 +1,6 @@
 using PageIndexCSharp.Model;
 
-namespace PageIndexCSharp.Store;
+namespace PageIndexCSharp.Interfaces;
 
 /// <summary>
 /// PageIndex 文档存储抽象，用于支持内存、文件、数据库、远程 API 等多种异步数据源。

@@ -1,5 +1,7 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using PageIndexCSharp.Interfaces;
+using PageIndexCSharp.Llm;
 using PageIndexCSharp.Store;
 
 namespace PageIndexCSharp;

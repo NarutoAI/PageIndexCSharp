@@ -1,17 +1,21 @@
 using System.Text;
 using System.Text.Json;
+using PageIndexCSharp.Extractors;
+using PageIndexCSharp.Interfaces;
 using PageIndexCSharp.Model;
 using PageIndexCSharp.Store;
+using PageIndexCSharp.StructureBuilders;
 
 namespace PageIndexCSharp;
 
 /// <summary>
-/// PageIndex C# 客户端：负责 PDF 索引生成和后续按结构/页码检索。
+/// PageIndex C# 客户端：负责文档索引生成和后续按结构/页码检索。
 /// </summary>
 public sealed class PageIndexClient
 {
     private readonly IPageIndexLlm _llm;
-    private readonly IPdfTextExtractor _pdfTextExtractor;
+    private readonly IPageContentExtractorFactory _pageContentExtractorFactory;
+    private readonly IPageIndexStructureBuilderFactory _structureBuilderFactory;
     private readonly IPageIndexDocumentStore _documentStore;
 
     /// <summary>
@@ -19,31 +23,64 @@ public sealed class PageIndexClient
     /// </summary>
     public PageIndexClient(
         IPageIndexLlm llm,
-        IPdfTextExtractor? pdfTextExtractor = null,
+        IPageContentExtractor? pageContentExtractor = null,
         IPageIndexDocumentStore? documentStore = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
-        _pdfTextExtractor = pdfTextExtractor ?? new PdfPigTextExtractor();
+        _pageContentExtractorFactory = new PageContentExtractorFactory(pageContentExtractor is null ? null : [pageContentExtractor]);
+        _structureBuilderFactory = new PageIndexStructureBuilderFactory(_llm);
+        _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
+    }
+
+    /// <summary>
+    /// 创建 PageIndex 客户端，并允许传入多个自定义内容提取器和结构构建器。
+    /// </summary>
+    public PageIndexClient(
+        IPageIndexLlm llm,
+        IEnumerable<IPageContentExtractor> customExtractors,
+        IPageIndexDocumentStore? documentStore = null,
+        IEnumerable<IPageIndexStructureBuilder>? customStructureBuilders = null)
+    {
+        _llm = llm ?? throw new ArgumentNullException(nameof(llm));
+        _pageContentExtractorFactory = new PageContentExtractorFactory(customExtractors);
+        _structureBuilderFactory = new PageIndexStructureBuilderFactory(_llm, customStructureBuilders);
+        _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
+    }
+
+    /// <summary>
+    /// 创建 PageIndex 客户端，并允许传入自定义内容提取器工厂和结构构建器工厂。
+    /// </summary>
+    public PageIndexClient(
+        IPageIndexLlm llm,
+        IPageContentExtractorFactory pageContentExtractorFactory,
+        IPageIndexStructureBuilderFactory structureBuilderFactory,
+        IPageIndexDocumentStore? documentStore = null)
+    {
+        _llm = llm ?? throw new ArgumentNullException(nameof(llm));
+        _pageContentExtractorFactory = pageContentExtractorFactory ?? throw new ArgumentNullException(nameof(pageContentExtractorFactory));
+        _structureBuilderFactory = structureBuilderFactory ?? throw new ArgumentNullException(nameof(structureBuilderFactory));
         _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
     }
     /// <summary>
-    /// 索引 PDF 文件，返回生成的 doc_id。
+    /// 索引文档文件，返回生成的 doc_id。
     /// </summary>
-    public async Task<string> IndexAsync(string pdfPath, PageIndexOptions? options = null, CancellationToken cancellationToken = default)
+    public async Task<string> IndexAsync(string documentPath, PageIndexOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= new PageIndexOptions();
-        string fullPath = Path.GetFullPath(pdfPath);
-        IReadOnlyList<PdfPageContent> pages = _pdfTextExtractor.ExtractPages(fullPath);
+        string fullPath = Path.GetFullPath(documentPath);
+        string documentType = GetDocumentType(fullPath);
+        IPageContentExtractor pageContentExtractor = _pageContentExtractorFactory.GetExtractor(fullPath);
+        IReadOnlyList<DocumentPageContent> pages = pageContentExtractor.ExtractPages(fullPath);
+
         if (pages.Count == 0)
         {
-            throw new InvalidOperationException("PDF contains no readable pages.");
+            throw new InvalidOperationException("Document contains no readable pages.");
         }
 
+        IPageIndexStructureBuilder structureBuilder = _structureBuilderFactory.GetBuilder(fullPath);
+        List<PageIndexNode> structure = await structureBuilder.BuildAsync(fullPath, pages, options, cancellationToken).ConfigureAwait(false);
+
         string docId = Guid.NewGuid().ToString();
-        string pagesText = BuildTaggedPagesText(pages, options.MaxChunkCharacters);
-        string tocJson = await _llm.CompleteAsync(PageIndexPrompts.BuildGenerateTocPrompt(pagesText), cancellationToken).ConfigureAwait(false);
-        List<PageIndexFlatItem> flatItems = PageIndexJsonUtilities.ParseFlatItems(tocJson);
-        List<PageIndexNode> structure = PageIndexJsonUtilities.BuildTree(flatItems, pages.Count);
 
         if (options.AddNodeText || options.AddNodeSummary)
         {
@@ -63,7 +100,7 @@ public sealed class PageIndexClient
         PageIndexDocument document = new()
         {
             Id = docId,
-            Type = "pdf",
+            Type = documentType,
             Path = fullPath,
             DocName = Path.GetFileName(fullPath),
             PageCount = pages.Count,
@@ -81,22 +118,17 @@ public sealed class PageIndexClient
         return docId;
     }
     
-    private static string BuildTaggedPagesText(IReadOnlyList<PdfPageContent> pages, int maxCharacters)
+    private static string GetDocumentType(string documentPath)
     {
-        StringBuilder builder = new();
-        foreach (PdfPageContent page in pages)
+        string extension = Path.GetExtension(documentPath).ToLowerInvariant();
+        return extension switch
         {
-            string tagged = $"<physical_index_{page.Page}>\n{page.Content}\n<physical_index_{page.Page}>\n\n";
-            if (builder.Length + tagged.Length > maxCharacters && builder.Length > 0)
-            {
-                break;
-            }
-
-            builder.Append(tagged);
-        }
-
-        return builder.ToString();
+            ".md" or ".markdown" => "md",
+            ".pdf" => "pdf",
+            _ => "pdf"
+        };
     }
+
 
     private async Task AddNodeSummariesAsync(IEnumerable<PageIndexNode> nodes, CancellationToken cancellationToken)
     {
@@ -112,7 +144,7 @@ public sealed class PageIndexClient
         }
     }
 
-    private static void AddNodeText(IEnumerable<PageIndexNode> nodes, IReadOnlyList<PdfPageContent> pages)
+    private static void AddNodeText(IEnumerable<PageIndexNode> nodes, IReadOnlyList<DocumentPageContent> pages)
     {
         Dictionary<int, string> pageMap = pages.ToDictionary(page => page.Page, page => page.Content);
         foreach (PageIndexNode node in Flatten(nodes))

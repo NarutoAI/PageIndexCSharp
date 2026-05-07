@@ -1,4 +1,4 @@
-namespace PageIndexCSharp;
+namespace PageIndexCSharp.Interfaces;
 
 /// <summary>
 /// PageIndex 调用 LLM 的抽象，便于测试和替换不同 Maf Agent。
