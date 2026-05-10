@@ -63,6 +63,8 @@ PageIndexCSharp/
     PageIndexNode.cs
     PageIndexOptions.cs
     PageIndexPageSelection.cs
+    PageIndexProgress.cs
+    PageIndexProgressStage.cs
 
   PageIndexClient.cs
   PageIndexSearchAgentFactory.cs
@@ -176,7 +178,26 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 
 `FilePageIndexDocumentStore` 负责从本地目录读取和保存 PageIndex 的 JSON 文档信息。
 
-### 5. 工具注册
+### 5. 索引进度通知
+
+`PageIndexClient.IndexAsync` 支持通过 `IProgress<PageIndexProgress>` 获取索引进度。
+
+进度阶段由 `PageIndexProgressStage` 表示，当前包括：
+
+- `Started`：开始索引文档。
+- `ExtractingContent`：正在提取文档内容。
+- `ContentExtracted`：文档内容提取完成。
+- `BuildingStructure`：正在构建文档结构。
+- `StructureBuilt`：文档结构构建完成。
+- `AttachingNodeText`：正在为结构节点挂载正文。
+- `SummarizingNodes`：正在生成结构节点摘要。
+- `GeneratingDocumentDescription`：正在生成文档描述。
+- `SavingDocument`：正在保存索引文档。
+- `Completed`：文档索引完成。
+
+其中 `SummarizingNodes` 阶段会报告当前节点进度，包括 `Current`、`Total`、`Percent` 和 `CurrentNodeTitle`。
+
+### 6. 工具注册
 
 `PageIndexTools` 封装了供智能体调用的工具方法，当前已注册的工具包括：
 
@@ -184,7 +205,7 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 - `GetDocumentStructureAsync`：获取指定文档结构。
 - `GetPageContentAsync`：获取指定页面内容。
 
-### 6. 检索智能体工厂
+### 7. 检索智能体工厂
 
 `PageIndexSearchAgentFactory` 用于创建一个带有上述 3 个工具方法的检索智能体。
 
@@ -241,6 +262,33 @@ Markdown 文档也可以直接索引：
 
 ```csharp
 string documentId = await client.IndexAsync("./docs/example.md");
+```
+
+如果文件较大，可以传入进度回调：
+
+```csharp
+IProgress<PageIndexProgress> progress = new Progress<PageIndexProgress>(item =>
+{
+    string percent = item.Percent is null ? string.Empty : $" {item.Percent:0.##}%";
+    Console.WriteLine($"[{item.Stage}]{percent} {item.Message}");
+});
+
+PageIndexOptions options = new PageIndexOptions
+{
+    AddNodeSummary = true,
+    AddDocumentDescription = true
+};
+
+string documentId = await client.IndexAsync(
+    "./docs/example.pdf",
+    options,
+    progress);
+```
+
+当执行节点摘要生成时，会收到类似进度：
+
+```text
+[SummarizingNodes] 10.71% 正在生成节点摘要：背景介绍，3/28。
 ```
 
 ### 5. 传入自定义内容提取器

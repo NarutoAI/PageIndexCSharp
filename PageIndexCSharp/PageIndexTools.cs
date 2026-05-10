@@ -28,6 +28,7 @@ public sealed class PageIndexTools
           - 是：继续回答问题。
           - 否：继续根据上一步 `GetDocumentStructureAsync()` 工具返回的内容查找是否有可用的信息。
         - 一旦收集到足够的信息，生成一个完整的、有充分依据的答案。
+        - 不要在一次调用中，一直用同一个docId来调用`GetDocumentStructureAsync()`工具
         """;
 
     /// <summary>

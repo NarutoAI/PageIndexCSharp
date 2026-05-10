@@ -64,11 +64,27 @@ public sealed class PageIndexClient
     /// <summary>
     /// 索引文档文件，返回生成的 doc_id。
     /// </summary>
-    public async Task<string> IndexAsync(string documentPath, PageIndexOptions? options = null, CancellationToken cancellationToken = default)
+    public Task<string> IndexAsync(string documentPath, PageIndexOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        return IndexAsync(documentPath, options, progress: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// 索引文档文件，返回生成的 doc_id，并通过进度回调报告当前索引阶段。
+    /// </summary>
+    public async Task<string> IndexAsync(
+        string documentPath,
+        PageIndexOptions? options,
+        IProgress<PageIndexProgress>? progress,
+        CancellationToken cancellationToken = default)
     {
         options ??= new PageIndexOptions();
         string fullPath = Path.GetFullPath(documentPath);
         string documentType = GetDocumentType(fullPath);
+
+        ReportProgress(progress, PageIndexProgressStage.Started, "开始索引文档。");
+        ReportProgress(progress, PageIndexProgressStage.ExtractingContent, "正在提取文档内容。");
+
         IPageContentExtractor pageContentExtractor = _pageContentExtractorFactory.GetExtractor(fullPath);
         IReadOnlyList<DocumentPageContent> pages = pageContentExtractor.ExtractPages(fullPath);
 
@@ -77,19 +93,25 @@ public sealed class PageIndexClient
             throw new InvalidOperationException("Document contains no readable pages.");
         }
 
+        ReportProgress(progress, PageIndexProgressStage.ContentExtracted, $"文档内容提取完成，共 {pages.Count} 页或分段。", pages.Count, pages.Count, 100);
+        ReportProgress(progress, PageIndexProgressStage.BuildingStructure, "正在构建文档结构。");
+
         IPageIndexStructureBuilder structureBuilder = _structureBuilderFactory.GetBuilder(fullPath);
         List<PageIndexNode> structure = await structureBuilder.BuildAsync(fullPath, pages, options, cancellationToken).ConfigureAwait(false);
+
+        ReportProgress(progress, PageIndexProgressStage.StructureBuilt, "文档结构构建完成。");
 
         string docId = Guid.NewGuid().ToString();
 
         if (options.AddNodeText || options.AddNodeSummary)
         {
+            ReportProgress(progress, PageIndexProgressStage.AttachingNodeText, "正在为结构节点挂载正文。");
             AddNodeText(structure, pages);
         }
 
         if (options.AddNodeSummary)
         {
-            await AddNodeSummariesAsync(structure, cancellationToken).ConfigureAwait(false);
+            await AddNodeSummariesAsync(structure, progress, cancellationToken).ConfigureAwait(false);
         }
 
         if (!options.AddNodeText)
@@ -110,11 +132,14 @@ public sealed class PageIndexClient
 
         if (options.AddDocumentDescription)
         {
+            ReportProgress(progress, PageIndexProgressStage.GeneratingDocumentDescription, "正在生成文档描述。");
             string structureJson = JsonSerializer.Serialize(PageIndexJsonUtilities.CloneWithoutText(structure), PageIndexJsonUtilities.JsonOptions);
             document.DocDescription = await _llm.CompleteAsync(PageIndexPrompts.BuildDocumentDescriptionPrompt(structureJson), cancellationToken).ConfigureAwait(false);
         }
 
+        ReportProgress(progress, PageIndexProgressStage.SavingDocument, "正在保存索引文档。");
         await _documentStore.SaveAsync(document, cancellationToken).ConfigureAwait(false);
+        ReportProgress(progress, PageIndexProgressStage.Completed, "文档索引完成。", 1, 1, 100);
         return docId;
     }
     
@@ -130,18 +155,59 @@ public sealed class PageIndexClient
     }
 
 
-    private async Task AddNodeSummariesAsync(IEnumerable<PageIndexNode> nodes, CancellationToken cancellationToken)
+    private async Task AddNodeSummariesAsync(
+        IEnumerable<PageIndexNode> nodes,
+        IProgress<PageIndexProgress>? progress,
+        CancellationToken cancellationToken)
     {
-        foreach (PageIndexNode node in Flatten(nodes))
+        List<PageIndexNode> nodesToSummarize = Flatten(nodes)
+            .Where(node => !string.IsNullOrWhiteSpace(node.Text))
+            .ToList();
+
+        if (nodesToSummarize.Count == 0)
         {
+            ReportProgress(progress, PageIndexProgressStage.SummarizingNodes, "没有需要生成摘要的结构节点。", 0, 0, 100);
+            return;
+        }
+
+        for (int index = 0; index < nodesToSummarize.Count; index++)
+        {
+            PageIndexNode node = nodesToSummarize[index];
+            int current = index + 1;
+            double percent = current * 100d / nodesToSummarize.Count;
             string text = node.Text ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                continue;
-            }
+
+            ReportProgress(
+                progress,
+                PageIndexProgressStage.SummarizingNodes,
+                $"正在生成节点摘要：{node.Title}，{current}/{nodesToSummarize.Count}。",
+                current,
+                nodesToSummarize.Count,
+                percent,
+                node.Title);
 
             node.Summary = await _llm.CompleteAsync(PageIndexPrompts.BuildNodeSummaryPrompt(node.Title, text), cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static void ReportProgress(
+        IProgress<PageIndexProgress>? progress,
+        PageIndexProgressStage stage,
+        string message,
+        int? current = null,
+        int? total = null,
+        double? percent = null,
+        string? currentNodeTitle = null)
+    {
+        progress?.Report(new PageIndexProgress
+        {
+            Stage = stage,
+            Message = message,
+            Current = current,
+            Total = total,
+            Percent = percent,
+            CurrentNodeTitle = currentNodeTitle
+        });
     }
 
     private static void AddNodeText(IEnumerable<PageIndexNode> nodes, IReadOnlyList<DocumentPageContent> pages)
