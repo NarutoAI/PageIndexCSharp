@@ -51,6 +51,31 @@ public enum PageIndexProgressStage
     SavingDocument,
 
     /// <summary>
+    /// 正在处理 PDF Vision 页级内容。
+    /// </summary>
+    PdfVisionProcessingPage,
+
+    /// <summary>
+    /// 正在渲染 PDF 页面图片。
+    /// </summary>
+    PdfVisionRenderingPage,
+
+    /// <summary>
+    /// 正在保存 PDF 页面或嵌入图片。
+    /// </summary>
+    PdfVisionSavingImages,
+
+    /// <summary>
+    /// 正在调用视觉模型生成页面内容。
+    /// </summary>
+    PdfVisionCallingModel,
+
+    /// <summary>
+    /// 正在将视觉模型结果转换为结构。
+    /// </summary>
+    PdfVisionBuildingStructure,
+
+    /// <summary>
     /// 文档索引已完成。
     /// </summary>
     Completed

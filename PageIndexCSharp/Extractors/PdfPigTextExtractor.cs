@@ -33,7 +33,8 @@ public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
     public async Task<PageIndexBuildResult> BuildAsync(
         string documentPath,
         PageIndexOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<PageIndexProgress>? progress = null)
     {
         IReadOnlyList<DocumentPageContent> pages = await ExtractPagesAsync(documentPath).ConfigureAwait(false);
         string pagesText = BuildTaggedPagesText(pages, options.MaxChunkCharacters);

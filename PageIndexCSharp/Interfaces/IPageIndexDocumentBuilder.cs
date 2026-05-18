@@ -18,5 +18,6 @@ public interface IPageIndexDocumentBuilder
     Task<PageIndexBuildResult> BuildAsync(
         string documentPath,
         PageIndexOptions options,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<PageIndexProgress>? progress = null);
 }

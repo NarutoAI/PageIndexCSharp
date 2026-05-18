@@ -18,4 +18,10 @@ public sealed class DocumentPageContent
     /// </summary>
     [JsonPropertyName("content")]
     public string Content { get; set; } = string.Empty;
+
+
+    /// <summary>
+    /// 文档中嵌入的图片资源。
+    /// </summary>
+    public List<string> Images { get; set; } = [];
 }

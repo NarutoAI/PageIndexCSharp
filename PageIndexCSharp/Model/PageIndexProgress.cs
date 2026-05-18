@@ -34,4 +34,9 @@ public sealed class PageIndexProgress
     /// 当前正在处理的节点标题。
     /// </summary>
     public string? CurrentNodeTitle { get; init; }
+
+    /// <summary>
+    /// 当前正在处理的页码。
+    /// </summary>
+    public int? CurrentPage { get; init; }
 }

@@ -21,7 +21,8 @@ public sealed class MarkdownTextExtractor : IPageIndexDocumentBuilder
     public Task<PageIndexBuildResult> BuildAsync(
         string documentPath,
         PageIndexOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<PageIndexProgress>? progress = null)
     {
         PageIndexBuildResult result = new()
         {

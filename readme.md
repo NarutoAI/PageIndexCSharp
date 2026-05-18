@@ -128,7 +128,8 @@ public interface IPageIndexDocumentBuilder
     Task<PageIndexBuildResult> BuildAsync(
         string documentPath,
         PageIndexOptions options,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<PageIndexProgress>? progress = null);
 }
 ```
 
@@ -175,6 +176,11 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 - `SummarizingNodes`
 - `GeneratingDocumentDescription`
 - `SavingDocument`
+- `PdfVisionProcessingPage`
+- `PdfVisionRenderingPage`
+- `PdfVisionSavingImages`
+- `PdfVisionCallingModel`
+- `PdfVisionBuildingStructure`
 - `Completed`
 
 其中 `SummarizingNodes` 阶段会报告：
@@ -183,6 +189,16 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 - `Total`
 - `Percent`
 - `CurrentNodeTitle`
+
+`PdfVisionTextExtractor` 还会在逐页处理时报告：
+
+- 当前页处理开始 / 完成
+- 页面渲染
+- 页面渲染图保存
+- 嵌入图片保存
+- 视觉模型调用
+- Vision Markdown 转 PageIndex 结构
+- `CurrentPage`
 
 ### 6. 工具注册
 

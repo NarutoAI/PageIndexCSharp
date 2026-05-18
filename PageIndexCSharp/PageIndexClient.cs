@@ -88,7 +88,7 @@ public sealed class PageIndexClient
 
         IPageIndexDocumentBuilder documentBuilder = _documentBuilderFactory.GetBuilder(fullPath);
         PageIndexBuildResult buildResult = await documentBuilder
-            .BuildAsync(fullPath, options, cancellationToken)
+            .BuildAsync(fullPath, options, cancellationToken, progress)
             .ConfigureAwait(false);
 
         IReadOnlyList<DocumentPageContent> pages = buildResult.Pages;
