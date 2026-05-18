@@ -10,7 +10,7 @@ namespace PageIndexCSharp.Llm;
 /// <summary>
 /// 基于 Microsoft Agent Framework 的 LLM 适配器。
 /// </summary>
-public sealed class MafPageIndexLlm : IPageIndexLlm
+public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
 {
     private readonly IChatClient _chatClient;
     private readonly AIAgent _indexAgent;
@@ -32,6 +32,30 @@ public sealed class MafPageIndexLlm : IPageIndexLlm
         AgentResponse response =
             await _indexAgent.RunAsync(prompt, cancellationToken: cancellationToken).ConfigureAwait(false);
         return response.Text;
+    }
+
+    /// <inheritdoc />
+    public async Task<string> CompleteWithImageAsync(
+        string prompt,
+        byte[] imageBytes,
+        string mediaType,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+        ArgumentNullException.ThrowIfNull(imageBytes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
+
+        var message = new Microsoft.Extensions.AI.ChatMessage(ChatRole.User, new List<AIContent>
+        {
+            new TextContent(prompt),
+            new DataContent(imageBytes, mediaType)
+        });
+
+        ChatResponse response = await _chatClient
+            .GetResponseAsync(message, cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        return response.Text ?? string.Empty;
     }
 
     /// <summary>
@@ -70,6 +94,32 @@ public sealed class MafPageIndexLlm : IPageIndexLlm
                 NetworkTimeout = TimeSpan.FromMinutes(15)
             })
             .GetChatClient(model).AsIChatClient();
+
+        return new MafPageIndexLlm(chatClient);
+    }
+    /// <summary>
+    /// 创建response消息协议的LLM Agent
+    /// </summary>
+    public static MafPageIndexLlm FromResponseOpenAI(string url, string apiKey, string model)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new ArgumentException("OpenAI API key cannot be empty.", nameof(apiKey));
+        }
+
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            throw new ArgumentException("OpenAI model cannot be empty.", nameof(model));
+        }
+
+#pragma warning disable OPENAI001
+        var chatClient = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions()
+            {
+                Endpoint = new Uri(url),
+                NetworkTimeout = TimeSpan.FromMinutes(15)
+            })
+            .GetResponsesClient().AsIChatClient(model);
+#pragma warning restore OPENAI001
 
         return new MafPageIndexLlm(chatClient);
     }

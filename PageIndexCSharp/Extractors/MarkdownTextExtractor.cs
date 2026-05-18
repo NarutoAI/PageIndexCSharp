@@ -5,12 +5,12 @@ using PageIndexCSharp.Parsing;
 namespace PageIndexCSharp.Extractors;
 
 /// <summary>
-/// Markdown 文档文本提取器，将标题段落映射为逻辑页。
+/// Markdown 文档索引构建器，将标题段落映射为逻辑页并生成 PageIndex 结构。
 /// </summary>
-public sealed class MarkdownTextExtractor : IPageContentExtractor
+public sealed class MarkdownTextExtractor : IPageIndexDocumentBuilder
 {
     /// <inheritdoc />
-    public bool CanExtract(string documentPath)
+    public bool Can(string documentPath)
     {
         string extension = Path.GetExtension(documentPath);
         return extension.Equals(".md", StringComparison.OrdinalIgnoreCase)
@@ -18,8 +18,17 @@ public sealed class MarkdownTextExtractor : IPageContentExtractor
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<DocumentPageContent> ExtractPages(string documentPath)
+    public Task<PageIndexBuildResult> BuildAsync(
+        string documentPath,
+        PageIndexOptions options,
+        CancellationToken cancellationToken = default)
     {
-        return MarkdownPageIndexParser.ExtractPages(documentPath);
+        PageIndexBuildResult result = new()
+        {
+            Pages = MarkdownPageIndexParser.ExtractPages(documentPath),
+            Structure = MarkdownPageIndexParser.BuildStructure(documentPath)
+        };
+
+        return Task.FromResult(result);
     }
 }

@@ -2,22 +2,29 @@
 
 ## 项目说明
 
-此项目是 PageIndex 的 C# 版本实现，目的是让 C# 开发也能使用 PageIndex 的无向量库 RAG 知识检索方式。
+PageIndexCSharp 是 PageIndex 的 C# 实现，目标是让 C# 开发也能使用“无向量库”的 RAG 知识检索方式。
 
-项目当前包含以下核心部分：
+当前项目的核心抽象已经统一为 **`IPageIndexDocumentBuilder`**：
 
-- `PageIndexClient`：文档索引入口，负责组织文档提取、结构构建、摘要生成和存储。
-- `IPageContentExtractor`：文档内容提取接口，用于把不同格式文档提取为页面或逻辑分段内容。
-- `IPageContentExtractorFactory`：文档内容提取器工厂，根据文档类型选择提取器。
-- `PdfPigTextExtractor`：PDF 文档内容提取实现。
-- `MarkdownTextExtractor`：Markdown 文档内容提取实现。
-- `IPageIndexStructureBuilder`：页面索引结构构建接口，用于从文档内容生成目录结构。
-- `IPageIndexStructureBuilderFactory`：页面索引结构构建器工厂，根据文档类型选择结构构建器。
-- `MarkdownStructureBuilder`：Markdown 结构构建实现，直接根据标题层级生成目录结构。
-- `LlmPageIndexStructureBuilder`：基于 LLM 的通用结构构建实现，当前 PDF 默认使用该实现。
-- `IPageIndexDocumentStore`：页面索引文档存储接口，主要职责是保存和读取 PageIndex 文档 JSON。
-- `FilePageIndexDocumentStore`：基于文件系统的文档存储实现。
-- `PageIndexTools`：对外提供给智能体使用的检索工具集合。
+- 文档内容提取
+- 文档结构构建
+- 页面内容与节点结构的组合
+
+都由同一个构建器完成。
+
+---
+
+## 核心组件
+
+- `PageIndexClient`：索引入口，负责文档索引、节点摘要、文档描述和存储。
+- `IPageIndexDocumentBuilder`：统一文档索引构建接口。
+- `PageIndexDocumentBuilderFactory`：根据文档类型选择可用的构建器。
+- `PdfPigTextExtractor`：PDF 文档的默认统一构建器。
+- `PdfVisionTextExtractor`：基于视觉模型的 PDF 统一构建器。
+- `MarkdownTextExtractor`：Markdown 文档的统一构建器。
+- `IPageIndexDocumentStore`：PageIndex 文档存储接口。
+- `FilePageIndexDocumentStore`：文件系统存储实现。
+- `PageIndexTools`：提供给智能体使用的检索工具。
 - `IPageIndexLlm`：大语言模型抽象接口。
 - `MafPageIndexLlm`：当前项目中的 LLM 实现。
 - `PageIndexSearchAgentFactory`：用于创建检索智能体的工厂类。
@@ -29,22 +36,21 @@
 ```text
 PageIndexCSharp/
   Interfaces/
-    IPageContentExtractor.cs
-    IPageContentExtractorFactory.cs
+    IPageIndexDocumentBuilder.cs
+    IPageIndexDocumentBuilderFactory.cs
     IPageIndexDocumentStore.cs
     IPageIndexLlm.cs
-    IPageIndexStructureBuilder.cs
-    IPageIndexStructureBuilderFactory.cs
+    IPageIndexVisionLlm.cs
+    IImageStore.cs
+
+  DocumentBuilders/
+    PageIndexDocumentBuilderFactory.cs
 
   Extractors/
-    PdfPigTextExtractor.cs
     MarkdownTextExtractor.cs
-    PageContentExtractorFactory.cs
-
-  StructureBuilders/
-    MarkdownStructureBuilder.cs
-    LlmPageIndexStructureBuilder.cs
-    PageIndexStructureBuilderFactory.cs
+    PdfPigTextExtractor.cs
+    PdfPigTextExtractor2.cs
+    PdfVisionTextExtractor.cs
 
   Parsing/
     MarkdownPageIndexParser.cs
@@ -55,14 +61,15 @@ PageIndexCSharp/
   Store/
     FilePageIndexDocumentStore.cs
     InMemoryPageIndexDocumentStore.cs
+    FileImageStore.cs
 
   Model/
     DocumentPageContent.cs
+    PageIndexBuildResult.cs
     PageIndexDocument.cs
     PageIndexFlatItem.cs
     PageIndexNode.cs
     PageIndexOptions.cs
-    PageIndexPageSelection.cs
     PageIndexProgress.cs
     PageIndexProgressStage.cs
 
@@ -76,11 +83,12 @@ PageIndexCSharp/
 命名空间和目录保持一致，例如：
 
 - `PageIndexCSharp.Interfaces`
+- `PageIndexCSharp.DocumentBuilders`
 - `PageIndexCSharp.Extractors`
-- `PageIndexCSharp.StructureBuilders`
 - `PageIndexCSharp.Parsing`
 - `PageIndexCSharp.Llm`
 - `PageIndexCSharp.Store`
+- `PageIndexCSharp.Model`
 
 ---
 
@@ -93,13 +101,9 @@ PageIndexCSharp/
 ```text
 输入文档路径
   ↓
-IPageContentExtractorFactory 选择内容提取器
+PageIndexDocumentBuilderFactory 选择统一构建器
   ↓
-IPageContentExtractor.ExtractPages 提取页面或逻辑分段
-  ↓
-IPageIndexStructureBuilderFactory 选择结构构建器
-  ↓
-IPageIndexStructureBuilder.BuildAsync 构建目录结构
+IPageIndexDocumentBuilder.BuildAsync 生成页面内容和结构
   ↓
 PageIndexClient 补充节点正文、摘要和文档描述
   ↓
@@ -108,75 +112,53 @@ IPageIndexDocumentStore 保存 PageIndex 文档
 
 当前内置支持：
 
-- `.pdf`：使用 `PdfPigTextExtractor` 提取内容，然后使用 `LlmPageIndexStructureBuilder` 调用 LLM 生成目录结构。
-- `.md` / `.markdown`：使用 `MarkdownTextExtractor` 提取逻辑分段，然后使用 `MarkdownStructureBuilder` 根据标题层级直接生成目录结构。
+- `.pdf`：`PdfPigTextExtractor`
+- `.pdf`（视觉模式）：`PdfVisionTextExtractor`
+- `.md` / `.markdown`：`MarkdownTextExtractor`
 
-### 2. 文档内容提取
+### 2. 统一索引构建接口
 
-文档内容提取统一通过 `IPageContentExtractor` 完成：
+统一构建抽象如下：
 
 ```csharp
-public interface IPageContentExtractor
+public interface IPageIndexDocumentBuilder
 {
-    bool CanExtract(string documentPath);
+    bool Can(string documentPath);
 
-    IReadOnlyList<DocumentPageContent> ExtractPages(string documentPath);
+    Task<PageIndexBuildResult> BuildAsync(
+        string documentPath,
+        PageIndexOptions options,
+        CancellationToken cancellationToken = default);
 }
 ```
 
-默认提取器选择顺序：
+`PageIndexBuildResult` 包含：
+
+- `Pages`：文档逐页或逻辑分段内容
+- `Structure`：PageIndex 层级结构树
+
+### 3. 默认构建器选择
+
+默认选择顺序：
 
 ```text
-用户自定义提取器
+用户自定义一体化构建器
   ↓
 MarkdownTextExtractor
   ↓
 PdfPigTextExtractor
 ```
 
-因此用户自定义提取器可以覆盖内置的 Markdown 或 PDF 提取行为。
-
-### 3. 页面索引结构构建
-
-页面索引结构构建统一通过 `IPageIndexStructureBuilder` 完成：
-
-```csharp
-public interface IPageIndexStructureBuilder
-{
-    bool CanBuild(string documentPath);
-
-    Task<List<PageIndexNode>> BuildAsync(
-        string documentPath,
-        IReadOnlyList<DocumentPageContent> pages,
-        PageIndexOptions options,
-        CancellationToken cancellationToken = default);
-}
-```
-
-默认结构构建器选择顺序：
-
-```text
-用户自定义结构构建器
-  ↓
-MarkdownStructureBuilder
-  ↓
-LlmPageIndexStructureBuilder
-```
-
-其中：
-
-- `MarkdownStructureBuilder` 不调用 LLM，直接根据 Markdown 标题生成结构。
-- `LlmPageIndexStructureBuilder` 是兜底实现，适合 PDF 等需要 LLM 识别目录结构的文档。
+如果你需要视觉 OCR / 多模态 PDF 处理，可以直接传入 `PdfVisionTextExtractor`。
 
 ### 4. 文档存储
 
 PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
+
 当前默认实现包括：
 
 - `InMemoryPageIndexDocumentStore`
 - `FilePageIndexDocumentStore`
-
-`FilePageIndexDocumentStore` 负责从本地目录读取和保存 PageIndex 的 JSON 文档信息。
 
 ### 5. 索引进度通知
 
@@ -184,37 +166,42 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 
 进度阶段由 `PageIndexProgressStage` 表示，当前包括：
 
-- `Started`：开始索引文档。
-- `ExtractingContent`：正在提取文档内容。
-- `ContentExtracted`：文档内容提取完成。
-- `BuildingStructure`：正在构建文档结构。
-- `StructureBuilt`：文档结构构建完成。
-- `AttachingNodeText`：正在为结构节点挂载正文。
-- `SummarizingNodes`：正在生成结构节点摘要。
-- `GeneratingDocumentDescription`：正在生成文档描述。
-- `SavingDocument`：正在保存索引文档。
-- `Completed`：文档索引完成。
+- `Started`
+- `ExtractingContent`
+- `ContentExtracted`
+- `BuildingStructure`
+- `StructureBuilt`
+- `AttachingNodeText`
+- `SummarizingNodes`
+- `GeneratingDocumentDescription`
+- `SavingDocument`
+- `Completed`
 
-其中 `SummarizingNodes` 阶段会报告当前节点进度，包括 `Current`、`Total`、`Percent` 和 `CurrentNodeTitle`。
+其中 `SummarizingNodes` 阶段会报告：
+
+- `Current`
+- `Total`
+- `Percent`
+- `CurrentNodeTitle`
 
 ### 6. 工具注册
 
 `PageIndexTools` 封装了供智能体调用的工具方法，当前已注册的工具包括：
 
-- `GetAllDocumentAsync`：获取全部文档列表。
-- `GetDocumentStructureAsync`：获取指定文档结构。
-- `GetPageContentAsync`：获取指定页面内容。
+- `GetAllDocumentAsync`：获取全部文档列表
+- `GetDocumentStructureAsync`：获取指定文档结构
+- `GetPageContentAsync`：获取指定页面内容
 
 ### 7. 检索智能体工厂
 
-`PageIndexSearchAgentFactory` 用于创建一个带有上述 3 个工具方法的检索智能体。
+`PageIndexSearchAgentFactory` 用于创建检索智能体。
 
-这样可以保持职责清晰：
+职责划分如下：
 
-- `MafPageIndexLlm` 负责 LLM 能力本身。
-- `PageIndexClient` 负责生成 PageIndex 文档。
-- `PageIndexTools` 负责业务工具方法。
-- `PageIndexSearchAgentFactory` 负责创建并组装检索智能体。
+- `MafPageIndexLlm` 负责 LLM 能力本身
+- `PageIndexClient` 负责生成 PageIndex 文档
+- `PageIndexTools` 负责业务工具方法
+- `PageIndexSearchAgentFactory` 负责创建并组装检索智能体
 
 ---
 
@@ -224,12 +211,12 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 
 ```csharp
 using PageIndexCSharp;
+using PageIndexCSharp.DocumentBuilders;
 using PageIndexCSharp.Extractors;
 using PageIndexCSharp.Interfaces;
 using PageIndexCSharp.Llm;
 using PageIndexCSharp.Model;
 using PageIndexCSharp.Store;
-using PageIndexCSharp.StructureBuilders;
 ```
 
 ### 2. 创建文档存储
@@ -248,13 +235,8 @@ IPageIndexLlm llm = MafPageIndexLlm.FromOpenAI(...);
 
 ### 4. 创建 PageIndexClient 并生成索引
 
-使用默认 PDF / Markdown 支持：
-
 ```csharp
-PageIndexClient client = new PageIndexClient(
-    llm,
-    documentStore: store);
-
+PageIndexClient client = new PageIndexClient(llm, documentStore: store);
 string documentId = await client.IndexAsync("./docs/example.pdf");
 ```
 
@@ -273,7 +255,7 @@ IProgress<PageIndexProgress> progress = new Progress<PageIndexProgress>(item =>
     Console.WriteLine($"[{item.Stage}]{percent} {item.Message}");
 });
 
-PageIndexOptions options = new PageIndexOptions
+PageIndexOptions options = new()
 {
     AddNodeSummary = true,
     AddDocumentDescription = true
@@ -285,28 +267,24 @@ string documentId = await client.IndexAsync(
     progress);
 ```
 
-当执行节点摘要生成时，会收到类似进度：
+### 5. 传入自定义统一构建器
 
-```text
-[SummarizingNodes] 10.71% 正在生成节点摘要：背景介绍，3/28。
-```
-
-### 5. 传入自定义内容提取器
-
-如果需要支持 Word、HTML 或其他格式，可以实现 `IPageContentExtractor`：
+如果你有自己的文档处理方式，直接实现 `IPageIndexDocumentBuilder` 即可：
 
 ```csharp
-public sealed class HtmlTextExtractor : IPageContentExtractor
+public sealed class HtmlDocumentBuilder : IPageIndexDocumentBuilder
 {
-    public bool CanExtract(string documentPath)
+    public bool Can(string documentPath)
     {
         return Path.GetExtension(documentPath)
             .Equals(".html", StringComparison.OrdinalIgnoreCase);
     }
 
-    public IReadOnlyList<DocumentPageContent> ExtractPages(string documentPath)
+    public Task<PageIndexBuildResult> BuildAsync(
+        string documentPath,
+        PageIndexOptions options,
+        CancellationToken cancellationToken = default)
     {
-        // 提取 HTML 内容并转换为 DocumentPageContent。
         throw new NotImplementedException();
     }
 }
@@ -317,48 +295,34 @@ public sealed class HtmlTextExtractor : IPageContentExtractor
 ```csharp
 PageIndexClient client = new PageIndexClient(
     llm,
-    customExtractors: [
-        new HtmlTextExtractor()
+    new HtmlDocumentBuilder(),
+    documentStore: store);
+```
+
+或者传入多个自定义构建器：
+
+```csharp
+PageIndexClient client = new PageIndexClient(
+    llm,
+    customDocumentBuilders: [
+        new HtmlDocumentBuilder()
     ],
     documentStore: store);
 ```
 
-### 6. 传入自定义结构构建器
+### 6. 使用视觉 PDF 构建器
 
-如果某种文档不需要 LLM 生成目录，也可以实现 `IPageIndexStructureBuilder`：
-
-```csharp
-public sealed class HtmlStructureBuilder : IPageIndexStructureBuilder
-{
-    public bool CanBuild(string documentPath)
-    {
-        return Path.GetExtension(documentPath)
-            .Equals(".html", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public Task<List<PageIndexNode>> BuildAsync(
-        string documentPath,
-        IReadOnlyList<DocumentPageContent> pages,
-        PageIndexOptions options,
-        CancellationToken cancellationToken = default)
-    {
-        // 根据 HTML 标题结构生成 PageIndexNode 树。
-        throw new NotImplementedException();
-    }
-}
-```
-
-然后传入 `PageIndexClient`：
+如果你希望 PDF 走视觉模型，可直接使用 `PdfVisionTextExtractor`：
 
 ```csharp
+IPageIndexDocumentBuilder builder = new PdfVisionTextExtractor(
+    visionLlm,
+    new FileImageStore(),
+    new PdfVisionExtractorOptions { RenderDpi = 200 });
+
 PageIndexClient client = new PageIndexClient(
     llm,
-    customExtractors: [
-        new HtmlTextExtractor()
-    ],
-    customStructureBuilders: [
-        new HtmlStructureBuilder()
-    ],
+    builder,
     documentStore: store);
 ```
 
@@ -372,3 +336,8 @@ AIAgent agent = PageIndexSearchAgentFactory.Create(mafLlm, store);
 创建好 agent 后，即可将用户问题交给该智能体，由它自动调用 `PageIndexTools` 中注册的工具完成检索。
 
 ---
+
+## 备注
+
+- 项目已统一为一体化构建接口，不再保留旧的内容提取器 / 结构构建器双轨接口。
+- PDF 内容提取如果对准确性要求更高，建议优先使用 `PdfVisionTextExtractor` 或 `PdfPigTextExtractor2` 这类更接近阅读顺序的实现。

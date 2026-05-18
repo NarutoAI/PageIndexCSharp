@@ -21,7 +21,7 @@ public static partial class MarkdownPageIndexParser
         public required string Text { get; init; }
     }
 
-    private sealed record MarkdownParseResult(List<PageIndexNode> Structure, List<DocumentPageContent> Pages);
+    internal sealed record MarkdownParseResult(List<PageIndexNode> Structure, List<DocumentPageContent> Pages);
 
     /// <summary>
     /// 读取 Markdown 文件，并根据 # 标题层级生成 PageIndex 文档结构和逻辑分段内容。
@@ -48,7 +48,7 @@ public static partial class MarkdownPageIndexParser
         return ParseInternal(markdownPath).Structure;
     }
 
-    private static MarkdownParseResult ParseInternal(string markdownPath)
+    internal static MarkdownParseResult ParseInternal(string markdownPath)
     {
         if (string.IsNullOrWhiteSpace(markdownPath))
         {
@@ -61,6 +61,16 @@ public static partial class MarkdownPageIndexParser
         }
 
         var markdownContent = File.ReadAllText(markdownPath);
+
+        return ParseMarkdownTxtInternal(Path.GetFileNameWithoutExtension(markdownPath), markdownContent);
+    }
+
+    /// <summary>
+    /// markdown文本
+    /// </summary>
+    /// <returns></returns>
+    internal static MarkdownParseResult ParseMarkdownTxtInternal(string title, string markdownContent)
+    {
         var lines = markdownContent.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         //查找所有标题所在的行
         var headingLineIndexes = FindHeadingLineIndexes(lines);
@@ -80,7 +90,7 @@ public static partial class MarkdownPageIndexParser
             [
                 new PageIndexNode
                 {
-                    Title = Path.GetFileNameWithoutExtension(markdownPath),
+                    Title = title,
                     NodeId = "0000",
                     StartIndex = 1,
                     EndIndex = 1,
@@ -90,6 +100,7 @@ public static partial class MarkdownPageIndexParser
 
             return new MarkdownParseResult(singleNode, singlePage);
         }
+
         //找到每个标题对应的节点数据
         var sections = BuildSections(lines, headingLineIndexes);
         var pages = sections
@@ -132,7 +143,8 @@ public static partial class MarkdownPageIndexParser
         return headingLineIndexes;
     }
 
-    private static List<MarkdownSection> BuildSections(IReadOnlyList<string> lines, IReadOnlyList<int> headingLineIndexes)
+    private static List<MarkdownSection> BuildSections(IReadOnlyList<string> lines,
+        IReadOnlyList<int> headingLineIndexes)
     {
         List<MarkdownSection> sections = [];
         for (var index = 0; index < headingLineIndexes.Count; index++)

@@ -18,17 +18,23 @@ public sealed class PageIndexTools
     /// </summary>
     public const string Instructions = """
         您是 PageIndex，一款文档知识检索助手。
+        图片处理规则 - 必须遵守
+        - `GetPageContentAsync()` 返回的正文中若出现形如 `![](./images/img-0.jpeg)` 的 Markdown 图片语法，                                                                                                                   
+          你必须在最终回答中**原样保留**这段文本，位置与原文上下文对应，不得省略、改写或转义。                                                                                                                               
+        - 这些图片是答案的一部分，用户需要看到它们，而不是它们的描述。                                                                                                                                                       
+        - 示例：原文是 "下图展示了流程：![](./images/img-0.jpeg) 该流程包含三步"，                                                                                                                                           
+          你的回答中也要包含 `![](./images/img-0.jpeg)`。    
         工具使用方法：
         - 首先调用 `GetAllDocumentAsync()` 来确认状态以及页码/行数。
         - 调用 `GetDocumentStructureAsync()` 来确定相关的页码范围。
         - 使用精确的范围（如 pages: 5-7、3,8、12）调用 `GetPageContentAsync()`；切勿获取整个文档。
+        - 不要在一次调用中，一直用同一个 docId 来调用 `GetDocumentStructureAsync()` 工具。
 
         补充说明：
         - 信息是否充分？
           - 是：继续回答问题。
           - 否：继续根据上一步 `GetDocumentStructureAsync()` 工具返回的内容查找是否有可用的信息。
         - 一旦收集到足够的信息，生成一个完整的、有充分依据的答案。
-        - 不要在一次调用中，一直用同一个docId来调用`GetDocumentStructureAsync()`工具
         """;
 
     /// <summary>
@@ -104,6 +110,12 @@ public sealed class PageIndexTools
         {
             return JsonSerializer.Serialize(new { error = $"Invalid pages format: {pages}. Use \"5-7\", \"3,8\", or \"12\". Error: {ex.Message}" }, PageIndexJsonUtilities.JsonOptions);
         }
+    }
+
+    [Description("获取文档中的图片信息，数据返回图片的base64编码")]
+    public async Task<string> GetDocumentImage([Description("图片的地址")] string imagePath)
+    {
+        return default;
     }
 
     private static HashSet<int> ParsePages(string pages)

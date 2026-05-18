@@ -1,10 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using PageIndexCSharp.Extractors;
+using PageIndexCSharp.DocumentBuilders;
 using PageIndexCSharp.Interfaces;
 using PageIndexCSharp.Model;
 using PageIndexCSharp.Store;
-using PageIndexCSharp.StructureBuilders;
 
 namespace PageIndexCSharp;
 
@@ -14,8 +13,7 @@ namespace PageIndexCSharp;
 public sealed class PageIndexClient
 {
     private readonly IPageIndexLlm _llm;
-    private readonly IPageContentExtractorFactory _pageContentExtractorFactory;
-    private readonly IPageIndexStructureBuilderFactory _structureBuilderFactory;
+    private readonly IPageIndexDocumentBuilderFactory _documentBuilderFactory;
     private readonly IPageIndexDocumentStore _documentStore;
 
     /// <summary>
@@ -23,44 +21,46 @@ public sealed class PageIndexClient
     /// </summary>
     public PageIndexClient(
         IPageIndexLlm llm,
-        IPageContentExtractor? pageContentExtractor = null,
-        IPageIndexDocumentStore? documentStore = null)
-    {
-        _llm = llm ?? throw new ArgumentNullException(nameof(llm));
-        _pageContentExtractorFactory = new PageContentExtractorFactory(pageContentExtractor is null ? null : [pageContentExtractor]);
-        _structureBuilderFactory = new PageIndexStructureBuilderFactory(_llm);
-        _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
-    }
-
-    /// <summary>
-    /// 创建 PageIndex 客户端，并允许传入多个自定义内容提取器和结构构建器。
-    /// </summary>
-    public PageIndexClient(
-        IPageIndexLlm llm,
-        IEnumerable<IPageContentExtractor> customExtractors,
         IPageIndexDocumentStore? documentStore = null,
-        IEnumerable<IPageIndexStructureBuilder>? customStructureBuilders = null)
+        IImageStore? imageStore = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
-        _pageContentExtractorFactory = new PageContentExtractorFactory(customExtractors);
-        _structureBuilderFactory = new PageIndexStructureBuilderFactory(_llm, customStructureBuilders);
+        _documentBuilderFactory = new PageIndexDocumentBuilderFactory(_llm, imageStore: imageStore);
         _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
     }
 
     /// <summary>
-    /// 创建 PageIndex 客户端，并允许传入自定义内容提取器工厂和结构构建器工厂。
+    /// 创建 PageIndex 客户端，并允许传入自定义一体化文档索引构建器。
     /// </summary>
     public PageIndexClient(
         IPageIndexLlm llm,
-        IPageContentExtractorFactory pageContentExtractorFactory,
-        IPageIndexStructureBuilderFactory structureBuilderFactory,
+        IPageIndexDocumentBuilder documentBuilder,
         IPageIndexDocumentStore? documentStore = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
-        _pageContentExtractorFactory = pageContentExtractorFactory ?? throw new ArgumentNullException(nameof(pageContentExtractorFactory));
-        _structureBuilderFactory = structureBuilderFactory ?? throw new ArgumentNullException(nameof(structureBuilderFactory));
+        _documentBuilderFactory = new PageIndexDocumentBuilderFactory(
+            _llm,
+            customDocumentBuilders: [documentBuilder ?? throw new ArgumentNullException(nameof(documentBuilder))]);
         _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
     }
+
+    /// <summary>
+    /// 创建 PageIndex 客户端，并允许传入多个自定义一体化文档索引构建器。
+    /// </summary>
+    public PageIndexClient(
+        IPageIndexLlm llm,
+        IEnumerable<IPageIndexDocumentBuilder> customDocumentBuilders,
+        IPageIndexDocumentStore? documentStore = null,
+        IImageStore? imageStore = null)
+    {
+        _llm = llm ?? throw new ArgumentNullException(nameof(llm));
+        _documentBuilderFactory = new PageIndexDocumentBuilderFactory(
+            _llm,
+            customDocumentBuilders: customDocumentBuilders,
+            imageStore: imageStore);
+        _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
+    }
+
     /// <summary>
     /// 索引文档文件，返回生成的 doc_id。
     /// </summary>
@@ -84,9 +84,15 @@ public sealed class PageIndexClient
 
         ReportProgress(progress, PageIndexProgressStage.Started, "开始索引文档。");
         ReportProgress(progress, PageIndexProgressStage.ExtractingContent, "正在提取文档内容。");
+        ReportProgress(progress, PageIndexProgressStage.BuildingStructure, "正在构建文档结构。");
 
-        IPageContentExtractor pageContentExtractor = _pageContentExtractorFactory.GetExtractor(fullPath);
-        IReadOnlyList<DocumentPageContent> pages = pageContentExtractor.ExtractPages(fullPath);
+        IPageIndexDocumentBuilder documentBuilder = _documentBuilderFactory.GetBuilder(fullPath);
+        PageIndexBuildResult buildResult = await documentBuilder
+            .BuildAsync(fullPath, options, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<DocumentPageContent> pages = buildResult.Pages;
+        List<PageIndexNode> structure = buildResult.Structure;
 
         if (pages.Count == 0)
         {
@@ -94,11 +100,6 @@ public sealed class PageIndexClient
         }
 
         ReportProgress(progress, PageIndexProgressStage.ContentExtracted, $"文档内容提取完成，共 {pages.Count} 页或分段。", pages.Count, pages.Count, 100);
-        ReportProgress(progress, PageIndexProgressStage.BuildingStructure, "正在构建文档结构。");
-
-        IPageIndexStructureBuilder structureBuilder = _structureBuilderFactory.GetBuilder(fullPath);
-        List<PageIndexNode> structure = await structureBuilder.BuildAsync(fullPath, pages, options, cancellationToken).ConfigureAwait(false);
-
         ReportProgress(progress, PageIndexProgressStage.StructureBuilt, "文档结构构建完成。");
 
         string docId = Guid.NewGuid().ToString();
