@@ -10,7 +10,7 @@ namespace PageIndexCSharp.Llm;
 /// <summary>
 /// 基于 Microsoft Agent Framework 的 LLM 适配器。
 /// </summary>
-public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
+public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
 {
     private readonly IChatClient _chatClient;
     private readonly AIAgent _indexAgent;
@@ -18,7 +18,7 @@ public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
     /// <summary>
     /// 使用现有 Maf Agent 创建 LLM 适配器。
     /// </summary>
-    public MafPageIndexLlm(IChatClient chatClient)
+    public OpenAIPageIndexLlm(IChatClient chatClient)
     {
         _chatClient = chatClient ?? throw new ArgumentNullException(nameof(chatClient));
         _indexAgent = _chatClient.AsAIAgent(
@@ -51,7 +51,7 @@ public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
             new DataContent(imageBytes, mediaType)
         });
 
-        ChatResponse response = await _chatClient
+        var response = await _chatClient
             .GetResponseAsync(message, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
@@ -76,7 +76,7 @@ public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
     /// <summary>
     /// 通过 OpenAI API Key 和模型名称快速创建 MafPageIndexLlm。
     /// </summary>
-    public static MafPageIndexLlm FromOpenAI(string url, string apiKey, string model)
+    public static OpenAIPageIndexLlm FromOpenAI(string url, string apiKey, string model)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -95,12 +95,12 @@ public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
             })
             .GetChatClient(model).AsIChatClient();
 
-        return new MafPageIndexLlm(chatClient);
+        return new OpenAIPageIndexLlm(chatClient);
     }
     /// <summary>
     /// 创建response消息协议的LLM Agent
     /// </summary>
-    public static MafPageIndexLlm FromResponseOpenAI(string url, string apiKey, string model)
+    public static OpenAIPageIndexLlm FromResponseOpenAI(string url, string apiKey, string model)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -121,6 +121,6 @@ public sealed class MafPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
             .GetResponsesClient().AsIChatClient(model);
 #pragma warning restore OPENAI001
 
-        return new MafPageIndexLlm(chatClient);
+        return new OpenAIPageIndexLlm(chatClient);
     }
 }

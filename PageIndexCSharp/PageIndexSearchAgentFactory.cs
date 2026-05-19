@@ -18,7 +18,7 @@ public static class PageIndexSearchAgentFactory
     /// <param name="documentStore">文档存储实例。</param>
     /// <returns>已注册检索工具的智能体。</returns>
     public static AIAgent CreateSearchAgent(
-        MafPageIndexLlm llm,
+        OpenAIPageIndexLlm llm,
         IPageIndexDocumentStore documentStore)
     {
         ArgumentNullException.ThrowIfNull(llm);
