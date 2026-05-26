@@ -353,10 +353,6 @@ AIAgent agent = PageIndexSearchAgentFactory.Create(mafLlm, store);
 
 ---
 
-## 备注
-
-- 项目已统一为一体化构建接口，不再保留旧的内容提取器 / 结构构建器双轨接口。
-- PDF 内容提取如果对准确性要求更高，建议优先使用 `PdfVisionTextExtractor` 或 `PdfPigTextExtractor2` 这类更接近阅读顺序的实现。
 
 # 公众号
 ![](/doc/gzh.jpg)
