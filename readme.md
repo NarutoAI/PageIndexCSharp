@@ -56,7 +56,7 @@ PageIndexCSharp/
     MarkdownPageIndexParser.cs
 
   Llm/
-    MafPageIndexLlm.cs
+    OpenAIPageIndexLlm.cs
 
   Store/
     FilePageIndexDocumentStore.cs
@@ -214,7 +214,7 @@ PageIndex 数据通过 `IPageIndexDocumentStore` 进行访问。
 
 职责划分如下：
 
-- `MafPageIndexLlm` 负责 LLM 能力本身
+- `OpenAIPageIndexLlm` 负责 openai LLM 能力本身
 - `PageIndexClient` 负责生成 PageIndex 文档
 - `PageIndexTools` 负责业务工具方法
 - `PageIndexSearchAgentFactory` 负责创建并组装检索智能体
@@ -244,7 +244,7 @@ IPageIndexDocumentStore store = new FilePageIndexDocumentStore("./pageindex-stor
 ### 3. 创建 LLM 实例
 
 ```csharp
-IPageIndexLlm llm = MafPageIndexLlm.FromOpenAI(...);
+IPageIndexLlm llm = OpenAIPageIndexLlm.FromOpenAI(...);
 ```
 
 实际初始化参数请根据你当前使用的模型配置填写。
@@ -345,7 +345,7 @@ PageIndexClient client = new PageIndexClient(
 ### 7. 创建页面索引检索智能体
 
 ```csharp
-MafPageIndexLlm mafLlm = new MafPageIndexLlm(...);
+OpenAIPageIndexLlm mafLlm = new OpenAIPageIndexLlm(...);
 AIAgent agent = PageIndexSearchAgentFactory.Create(mafLlm, store);
 ```
 
@@ -357,3 +357,6 @@ AIAgent agent = PageIndexSearchAgentFactory.Create(mafLlm, store);
 
 - 项目已统一为一体化构建接口，不再保留旧的内容提取器 / 结构构建器双轨接口。
 - PDF 内容提取如果对准确性要求更高，建议优先使用 `PdfVisionTextExtractor` 或 `PdfPigTextExtractor2` 这类更接近阅读顺序的实现。
+
+# 公众号
+![](/doc/gzh.jpg)
