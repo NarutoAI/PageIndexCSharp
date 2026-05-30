@@ -12,15 +12,13 @@ namespace PageIndexCSharp.Extractors;
 public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
 {
     private readonly IPageIndexLlm _llm;
-    private readonly IImageStore _imageStore;
 
     /// <summary>
     /// 创建基于 PdfPig 的 PDF 文档索引构建器。
     /// </summary>
-    public PdfPigTextExtractor(IPageIndexLlm llm, IImageStore imageStore)
+    public PdfPigTextExtractor(IPageIndexLlm llm)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
-        _imageStore = imageStore ?? throw new ArgumentNullException(nameof(imageStore));
     }
 
     /// <inheritdoc />
@@ -37,14 +35,32 @@ public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
         IProgress<PageIndexProgress>? progress = null)
     {
         IReadOnlyList<DocumentPageContent> pages = await ExtractPagesAsync(documentPath).ConfigureAwait(false);
-        string pagesText = BuildTaggedPagesText(pages, options.MaxChunkCharacters);
-        string tocJson = await _llm.CompleteAsync(PageIndexPrompts.BuildGenerateTocPrompt(pagesText), cancellationToken).ConfigureAwait(false);
-        List<PageIndexFlatItem> flatItems = PageIndexJsonUtilities.ParseFlatItems(tocJson);
+        IReadOnlyList<string> chunks = ChunkTaggedPagesText(pages, options.MaxChunkCharacters);
+
+        List<PageIndexFlatItem> allItems = new();
+        for (int i = 0; i < chunks.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new PageIndexProgress
+            {
+                Stage = PageIndexProgressStage.BuildingStructure,
+                Message = $"正在生成第 {i + 1}/{chunks.Count} 个文本块的目录。",
+                Current = i + 1,
+                Total = chunks.Count,
+                Percent = (i + 1) * 100d / chunks.Count
+            });
+
+            string tocJson = await _llm.CompleteAsync(
+                PageIndexPrompts.BuildGenerateTocPrompt(chunks[i]),
+                cancellationToken).ConfigureAwait(false);
+            List<PageIndexFlatItem> chunkItems = PageIndexJsonUtilities.ParseFlatItems(tocJson);
+            allItems.AddRange(chunkItems);
+        }
 
         return new PageIndexBuildResult
         {
             Pages = pages,
-            Structure = PageIndexJsonUtilities.BuildTree(flatItems, pages.Count)
+            Structure = PageIndexJsonUtilities.BuildTree(allItems, pages.Count)
         };
     }
 
@@ -74,44 +90,41 @@ public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
                 Images = []
             };
             result.Add(itemDocumentPageContent);
-            // foreach (var itemImage in page.GetImages())
-            // {
-            //     var fileName = "";
-            //
-            //     //判断是否为png格式
-            //     if (itemImage.TryGetPng(out var bytes))
-            //     {
-            //         fileName = await _imageStore.AddAsync(bytes, docName,
-            //             $"img-{index}.png");
-            //     }
-            //     else
-            //     {
-            //         fileName = await _imageStore.AddAsync(itemImage.RawBytes.ToArray(), docName,
-            //             $"img-{index}.jpeg");
-            //     }
-            //
-            //     itemDocumentPageContent.Images.Add(fileName);
-            //     index++;
-            // }
         }
         
         return result;
     }
 
-    private static string BuildTaggedPagesText(IReadOnlyList<DocumentPageContent> pages, int maxCharacters)
+    private static IReadOnlyList<string> ChunkTaggedPagesText(
+        IReadOnlyList<DocumentPageContent> pages,
+        int maxCharacters)
     {
-        StringBuilder builder = new();
+        if (maxCharacters <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxCharacters), "maxCharacters must be positive.");
+        }
+
+        List<string> chunks = new();
+        StringBuilder current = new();
+
         foreach (DocumentPageContent page in pages)
         {
             string tagged = $"<physical_index_{page.Page}>\n{page.Content}\n<physical_index_{page.Page}>\n\n";
-            if (builder.Length + tagged.Length > maxCharacters && builder.Length > 0)
+
+            if (current.Length > 0 && current.Length + tagged.Length > maxCharacters)
             {
-                break;
+                chunks.Add(current.ToString());
+                current.Clear();
             }
 
-            builder.Append(tagged);
+            current.Append(tagged);
         }
 
-        return builder.ToString();
+        if (current.Length > 0)
+        {
+            chunks.Add(current.ToString());
+        }
+
+        return chunks;
     }
 }

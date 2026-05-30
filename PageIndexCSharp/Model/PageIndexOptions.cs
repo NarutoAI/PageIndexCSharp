@@ -23,5 +23,5 @@ public sealed class PageIndexOptions
     /// <summary>
     /// 单次发给 LLM 的最大字符数，用于粗略分块控制上下文。
     /// </summary>
-    public int MaxChunkCharacters { get; set; } = 60_000;
+    public int MaxChunkCharacters { get; set; } = 50_000;
 }

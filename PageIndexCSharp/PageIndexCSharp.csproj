@@ -10,7 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.5.0" />
+      <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.8.0" />
       <PackageReference Include="PdfPig" Version="0.1.14" />
       <PackageReference Include="PDFtoImage" Version="5.2.1" />
     </ItemGroup>

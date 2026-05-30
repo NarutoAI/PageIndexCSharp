@@ -3,6 +3,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using OpenAI.Chat;
+using OpenAI.Responses;
 using PageIndexCSharp.Interfaces;
 
 namespace PageIndexCSharp.Llm;
@@ -14,7 +15,8 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
 {
     private readonly IChatClient _chatClient;
     private readonly AIAgent _indexAgent;
-    
+    private readonly AgentSession _session;
+
     /// <summary>
     /// 使用现有 Maf Agent 创建 LLM 适配器。
     /// </summary>
@@ -22,15 +24,30 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
     {
         _chatClient = chatClient ?? throw new ArgumentNullException(nameof(chatClient));
         _indexAgent = _chatClient.AsAIAgent(
-            instructions: PageIndexPrompts.SystemInstructions,
-            name: "PageIndex");
+            new ChatClientAgentOptions()
+            {
+                Name = "PageIndex",
+                ChatOptions = new ChatOptions()
+                {
+                    Instructions = PageIndexPrompts.SystemInstructions,
+                },
+#pragma warning disable MEAI001
+                //消息裁剪，保留最新的几条记录，以便模型根据上下文理解
+                ChatHistoryProvider =
+                    new InMemoryChatHistoryProvider(new() {ChatReducer = new MessageCountingChatReducer(5)})
+#pragma warning restore MEAI001
+                
+            });
+        //创建会话历史
+        _session = _indexAgent.CreateSessionAsync().GetAwaiter().GetResult();
     }
 
     /// <inheritdoc />
     public async Task<string> CompleteAsync(string prompt, CancellationToken cancellationToken = default)
     {
         AgentResponse response =
-            await _indexAgent.RunAsync(prompt, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await _indexAgent.RunAsync(prompt, cancellationToken: cancellationToken, session: _session)
+                .ConfigureAwait(false);
         return response.Text;
     }
 
@@ -51,11 +68,8 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
             new DataContent(imageBytes, mediaType)
         });
 
-        var response = await _chatClient
-            .GetResponseAsync(message, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        return response.Text ?? string.Empty;
+        var response = await _indexAgent.RunAsync(message, cancellationToken: cancellationToken, session: _session);
+        return response.Text;
     }
 
     /// <summary>
@@ -97,6 +111,7 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
 
         return new OpenAIPageIndexLlm(chatClient);
     }
+
     /// <summary>
     /// 创建response消息协议的LLM Agent
     /// </summary>
@@ -113,12 +128,25 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
         }
 
 #pragma warning disable OPENAI001
+#pragma warning disable MAAI001
         var chatClient = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions()
             {
                 Endpoint = new Uri(url),
                 NetworkTimeout = TimeSpan.FromMinutes(15)
             })
-            .GetResponsesClient().AsIChatClient(model);
+
+           /**
+            * https://developers.openai.com/api/docs/guides/migrate-to-responses?update-item-definitions=responses&update-multiturn=responses
+            * ["reasoning.encrypted_content"]
+            * 禁用有状态存储，但是任然利用推理 设置 includeReasoningEncryptedContent=true
+            API 将返回推理令牌的加密版本；在未来的请求中，您可以像传递常规推理项一样，将这些加密令牌回传给 API
+            
+            当请求中包含 `encrypted_content` 时，系统会在内存中对其进行解密（绝不写入磁盘），
+            利用其生成后续响应，随后便会安全地将其销毁。任何新生成的推理令牌都会被即刻加密并返回给您，
+            从而确保不会有任何中间状态被持久化存储。
+            */
+            .GetResponsesClient().AsIChatClientWithStoredOutputDisabled(model);
+#pragma warning restore MAAI001
 #pragma warning restore OPENAI001
 
         return new OpenAIPageIndexLlm(chatClient);

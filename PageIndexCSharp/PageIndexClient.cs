@@ -25,7 +25,7 @@ public sealed class PageIndexClient
         IImageStore? imageStore = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
-        _documentBuilderFactory = new PageIndexDocumentBuilderFactory(_llm, imageStore: imageStore);
+        _documentBuilderFactory = new PageIndexDocumentBuilderFactory(_llm);
         _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
     }
 
@@ -50,14 +50,12 @@ public sealed class PageIndexClient
     public PageIndexClient(
         IPageIndexLlm llm,
         IEnumerable<IPageIndexDocumentBuilder> customDocumentBuilders,
-        IPageIndexDocumentStore? documentStore = null,
-        IImageStore? imageStore = null)
+        IPageIndexDocumentStore? documentStore = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
         _documentBuilderFactory = new PageIndexDocumentBuilderFactory(
             _llm,
-            customDocumentBuilders: customDocumentBuilders,
-            imageStore: imageStore);
+            customDocumentBuilders: customDocumentBuilders);
         _documentStore = documentStore ?? new InMemoryPageIndexDocumentStore();
     }
 
@@ -150,7 +148,6 @@ public sealed class PageIndexClient
         return extension switch
         {
             ".md" or ".markdown" => "md",
-            ".pdf" => "pdf",
             _ => "pdf"
         };
     }

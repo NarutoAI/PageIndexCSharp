@@ -16,8 +16,7 @@ public sealed class PageIndexDocumentBuilderFactory : IPageIndexDocumentBuilderF
     /// </summary>
     public PageIndexDocumentBuilderFactory(
         IPageIndexLlm llm,
-        IEnumerable<IPageIndexDocumentBuilder>? customDocumentBuilders = null,
-        IImageStore? imageStore = null)
+        IEnumerable<IPageIndexDocumentBuilder>? customDocumentBuilders = null)
     {
         ArgumentNullException.ThrowIfNull(llm);
 
@@ -29,7 +28,7 @@ public sealed class PageIndexDocumentBuilderFactory : IPageIndexDocumentBuilderF
         }
 
         builders.Add(new MarkdownTextExtractor());
-        builders.Add(new PdfPigTextExtractor(llm, imageStore ?? new FileImageStore()));
+        builders.Add(new PdfPigTextExtractor(llm));
         _builders = builders;
     }
 
