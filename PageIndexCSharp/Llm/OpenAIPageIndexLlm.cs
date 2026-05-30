@@ -1,6 +1,7 @@
 using System.ClientModel;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using OpenAI;
 using OpenAI.Chat;
 using OpenAI.Responses;
@@ -90,7 +91,7 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
     /// <summary>
     /// 通过 OpenAI API Key 和模型名称快速创建 MafPageIndexLlm。
     /// </summary>
-    public static OpenAIPageIndexLlm FromOpenAI(string url, string apiKey, string model)
+    public static OpenAIPageIndexLlm FromOpenAI(string url, string apiKey, string model,ILoggerFactory? loggerFactory = null)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -107,7 +108,10 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
                 Endpoint = new Uri(url),
                 NetworkTimeout = TimeSpan.FromMinutes(15)
             })
-            .GetChatClient(model).AsIChatClient();
+            .GetChatClient(model).AsIChatClient()
+            .AsBuilder()
+            .UseChatLogger(loggerFactory)
+            .Build();
 
         return new OpenAIPageIndexLlm(chatClient);
     }
@@ -115,7 +119,7 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
     /// <summary>
     /// 创建response消息协议的LLM Agent
     /// </summary>
-    public static OpenAIPageIndexLlm FromResponseOpenAI(string url, string apiKey, string model)
+    public static OpenAIPageIndexLlm FromResponseOpenAI(string url, string apiKey, string model,ILoggerFactory? loggerFactory = null)
     {
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -132,23 +136,47 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
         var chatClient = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions()
             {
                 Endpoint = new Uri(url),
-                NetworkTimeout = TimeSpan.FromMinutes(15)
+                NetworkTimeout = TimeSpan.FromMinutes(15),
             })
 
            /**
             * https://developers.openai.com/api/docs/guides/migrate-to-responses?update-item-definitions=responses&update-multiturn=responses
-            * ["reasoning.encrypted_content"]
-            * 禁用有状态存储，但是任然利用推理 设置 includeReasoningEncryptedContent=true
+            * ["reasoning.encrypted_content"] 返回加密的推理上下文 用户后续对话的传递
+            * 禁用有状态存储，但是任然利用推理 设置store=false 同时设置 includeReasoningEncryptedContent=true 返回加密的推理上下文
             API 将返回推理令牌的加密版本；在未来的请求中，您可以像传递常规推理项一样，将这些加密令牌回传给 API
             
-            当请求中包含 `encrypted_content` 时，系统会在内存中对其进行解密（绝不写入磁盘），
+            当请求中包含 `encrypted_content` 时，openai会在内存中对其进行解密（绝不写入磁盘），
             利用其生成后续响应，随后便会安全地将其销毁。任何新生成的推理令牌都会被即刻加密并返回给您，
             从而确保不会有任何中间状态被持久化存储。
             */
-            .GetResponsesClient().AsIChatClientWithStoredOutputDisabled(model);
+            .GetResponsesClient().AsIChatClientWithStoredOutputDisabled(model)
+            .AsBuilder()
+            .UseChatLogger(loggerFactory)
+            .ConfigureOptions(configure: options =>
+            {
+                //设置推理的信息
+                options.Reasoning = new ReasoningOptions
+                {
+                    Effort = ReasoningEffort.Medium,
+                    Output = ReasoningOutput.Summary//返回推理的摘要信息 ，因为推理上下文是加密的，无法解密，只能输出摘要
+                };
+            })
+            .Build();
 #pragma warning restore MAAI001
 #pragma warning restore OPENAI001
 
         return new OpenAIPageIndexLlm(chatClient);
+    }
+
+}
+
+internal static class ChatClientBuilderExtension
+{
+    extension(ChatClientBuilder chatClientBuilder)
+    {
+        public ChatClientBuilder UseChatLogger(ILoggerFactory? loggerFactory = null)
+        {
+            return loggerFactory==null ? chatClientBuilder : chatClientBuilder.UseLogging(loggerFactory);
+        }
     }
 }
