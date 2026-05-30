@@ -76,6 +76,7 @@ public sealed class PageIndexClient
         IProgress<PageIndexProgress>? progress,
         CancellationToken cancellationToken = default)
     {
+        using var operationScope = PageIndexOperationContext.BeginIndexing();
         options ??= new PageIndexOptions();
         string fullPath = Path.GetFullPath(documentPath);
         string documentType = GetDocumentType(fullPath);

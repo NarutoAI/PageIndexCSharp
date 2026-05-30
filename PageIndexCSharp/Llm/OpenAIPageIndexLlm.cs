@@ -149,15 +149,15 @@ public sealed class OpenAIPageIndexLlm : IPageIndexLlm, IPageIndexVisionLlm
             利用其生成后续响应，随后便会安全地将其销毁。任何新生成的推理令牌都会被即刻加密并返回给您，
             从而确保不会有任何中间状态被持久化存储。
             */
-            .GetResponsesClient().AsIChatClientWithStoredOutputDisabled(model)
+            .GetResponsesClient().AsIChatClientWithStoredOutputDisabled(model, includeReasoningEncryptedContent:true)
             .AsBuilder()
             .UseChatLogger(loggerFactory)
             .ConfigureOptions(configure: options =>
             {
-                //设置推理的信息
+                //索引构建流程只需要结构化输出，不需要额外推理；其它调用保留中等推理强度。
                 options.Reasoning = new ReasoningOptions
                 {
-                    Effort = ReasoningEffort.Medium,
+                    Effort = PageIndexOperationContext.IsIndexing ? ReasoningEffort.None : ReasoningEffort.Medium,
                     Output = ReasoningOutput.Summary//返回推理的摘要信息 ，因为推理上下文是加密的，无法解密，只能输出摘要
                 };
             })
