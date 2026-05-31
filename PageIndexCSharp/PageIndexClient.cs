@@ -21,8 +21,7 @@ public sealed class PageIndexClient
     /// </summary>
     public PageIndexClient(
         IPageIndexLlm llm,
-        IPageIndexDocumentStore? documentStore = null,
-        IImageStore? imageStore = null)
+        IPageIndexDocumentStore? documentStore = null)
     {
         _llm = llm ?? throw new ArgumentNullException(nameof(llm));
         _documentBuilderFactory = new PageIndexDocumentBuilderFactory(_llm);
