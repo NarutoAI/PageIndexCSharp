@@ -36,7 +36,7 @@ var client = new PageIndexClient(
     visionExtractor,
     documentStore: new FilePageIndexDocumentStore(dir2));
 Stopwatch stopwatch = Stopwatch.StartNew();
-await client.IndexAsync(Path.Combine(dir2, "系统架构设计师教程（第4版）-划重点版本.pdf"), new PageIndexOptions()
+await client.IndexAsync(Path.Combine(dir2, Environment.GetEnvironmentVariable("FileName")), new PageIndexOptions()
 {
     // MaxChunkCharacters = 2000
 }, progress: new Progress<PageIndexProgress>(a => { Console.WriteLine(a.Message); }));
