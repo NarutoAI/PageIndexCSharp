@@ -1,5 +1,7 @@
 ﻿<Solution>
-  <Project Path="PageIndexCSharp.Tests/PageIndexCSharp.Tests.csproj" />
+  <Folder Name="/sample/">
+    <Project Path="sample/ChatConsole/ChatConsole.csproj" />
+    <Project Path="sample\IndexConsole\IndexConsole.csproj" />
+  </Folder>
   <Project Path="PageIndexCSharp/PageIndexCSharp.csproj" />
-  <Project Path="sample/Sample/Sample.csproj" />
 </Solution>
