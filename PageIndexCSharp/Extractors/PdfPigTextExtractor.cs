@@ -34,7 +34,7 @@ public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
         CancellationToken cancellationToken = default,
         IProgress<PageIndexProgress>? progress = null)
     {
-        IReadOnlyList<DocumentPageContent> pages = await ExtractPagesAsync(documentPath).ConfigureAwait(false);
+        IReadOnlyList<DocumentPageContent> pages =  ExtractPagesAsync(documentPath);
         IReadOnlyList<string> chunks = ChunkTaggedPagesText(pages, options.MaxChunkCharacters);
 
         List<PageIndexFlatItem> allItems = new();
@@ -64,7 +64,7 @@ public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
         };
     }
 
-    private async Task<IReadOnlyList<DocumentPageContent>> ExtractPagesAsync(string documentPath)
+    private IReadOnlyList<DocumentPageContent> ExtractPagesAsync(string documentPath)
     {
         if (string.IsNullOrWhiteSpace(documentPath))
         {
@@ -75,12 +75,10 @@ public sealed class PdfPigTextExtractor : IPageIndexDocumentBuilder
         {
             throw new FileNotFoundException("Document file not found.", documentPath);
         }
-        var docName = new FileInfo(documentPath).Name;
 
         using var document = PdfDocument.Open(documentPath);
 
         List<DocumentPageContent> result = new(document.NumberOfPages);
-        // var index = 0;
         foreach (var page in document.GetPages().OrderBy(page => page.Number))
         {
             var itemDocumentPageContent = new DocumentPageContent
